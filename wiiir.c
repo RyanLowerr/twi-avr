@@ -1,6 +1,23 @@
 #include <avr/io.h>
 #include <util/twi.h>
 
+// TWI genera status codes
+#define TWI_START              0x08 // Start has been transmitted.
+#define TWI_REP_START          0x10 // Repeated start has been transmitted.
+#define TWI_ARB_LOST           0x38 // Arbitration lost.
+
+// TWI master transmitter status codes
+#define TWI_MTX_ADR_ACK        0x18 // SLA+W has been transmitted and ACK reveived.
+#define TWI_MTX_ARD_NACK       0x20 // SLA+W has been transmitted and NACK reveived.
+#define TWI_MTX_DATA_ACK       0x28 // Data byte has been transmitted and ACK reveived.
+#define TWI_MTX_DATA_NACK      0x30 // Data byte has been transmitted and NACK reveived.
+
+// TWI master reveiver status codeds
+#define TWI_MRX_ADR_ACK        0x40 // SLA+W has been transmitted and ACK reveived.
+#define TWI_MRX_ARD_NACK       0x48 // SLA+W has been transmitted and NACK reveived.
+#define TWI_MRX_DATA_ACK       0x50 // Data byte has been transmitted and ACK reveived.
+#define TWI_MRX_DATA_NACK      0x58 // Data byte has been transmitted and NACK reveived.
+
 void twi_init(void)
 {
 	// SCL freq = (CPU Clock) / (16 + 2(TWBR) * (prescale value))
@@ -13,30 +30,41 @@ void twi_init(void)
 	       (0 << TWWC);
 }
 
-uint8_t twi_busy(void)
-{
-	return (TWCR & (1 << TWIE));                       // TWI is busy when TWIE is enabled.
-}
-
 void twi_start(void)
 {
-	while(twi_busy());                                 // Wait untill TWI is ready.
-	
 	TWCR = (1 << TWEN) |                               // Enable TWI interface and release TWI pins.
-	       (1 << TWIE) | (1 << TWINT) |                // Enable TWI interupt and clear interupt flag.
+	       (0 << TWIE) | (1 << TWINT) |                // Enable TWI interupt.
 	       (0 << TWEA) | (1 << TWSTA) | (0 << TWSTO) | // Enable start condition.
 	       (0 << TWWC);
+}
+
+ISR(TWI_vect)
+{
+	switch (TWSR & 0xf8)                               // Chect the TWI status registar while masking off the prescaler bits.
+	{
+		case TWI_START:
+		case TWI_REP_START:
+		case TWI_MTX_ADR_ACK:
+		case TWI_MTX_DATA_ACK:
+		case TWI_MRX_ADR_ACK:
+		case TWI_MRX_DATA_ACK:
+		case TWI_MTX_ADR_NACK:
+		case TWI_MTX_DATA_NACK:
+		case TWI_MRX_ADR_NACK:
+		case TWI_MRX_DATA_NACK:		
+		default:
+			twi_init();                                // Reset the TWI.
+	}
 }
 
 int main(void)
 {
 
 	twi_init();
-	twi_start();
-		
+
 	while(1)
 	{
-		;
+		twi_start();
 	}
 	
 	return 0;
