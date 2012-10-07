@@ -22,9 +22,11 @@
 #define TWI_ACK  1
 #define TWI_NACK 0
 
-static volatile uint8_t twi_transceiver_buffer[128];
-static volatile uint8_t twi_transceiver_pointer;
-static volatile uint8_t twi_transceiver_length;
+static volatile uint8_t twi_tx_buffer[128];
+static volatile uint8_t twi_rx_buffer[128];
+static volatile uint8_t twi_tx_pointer;
+static volatile uint8_t twi_rx_pointer;
+static volatile uint8_t twi_tx_length;
 
 void twi_init(void)
 {
@@ -60,7 +62,7 @@ static void twi_enable_interupt(uint8_t ack)
 	{
 		TWCR = (1 << TWEN) |                               // Enable TWI interface and release TWI pins.
 			   (1 << TWIE) | (1 << TWINT) |                // Enable TWI interupt and clear the interupt flag.
-			   (0 << TWEA) | (0 << TWSTA) | (0 << TWSTO) |
+			   (1 << TWEA) | (0 << TWSTA) | (0 << TWSTO) |
 			   (0 << TWWC);
 	}
 	else
@@ -72,17 +74,40 @@ static void twi_enable_interupt(uint8_t ack)
 	}
 }
 
-void twi_write(uint8_t* msg, uint8_t length)
+void twi_write(uint8_t sla, uint8_t* data, uint8_t length)
 {
-	for(uint8_t i = 0; i < length; i++)                // Copy data to be transmitted into the transceiver buffer.
-		twi_transceiver_buffer[i] = msg[i];		
-	twi_transceiver_length = length;                    // Save the data length for use in the interupt routine.
-	twi_start();                                       // Initiate transmission by issusing a start condition.
+	// Copy slave address into the tx buffer.
+	twi_tx_buffer[0] = sla << 1;
+	
+	// Copy data to be transmitted into the tx buffer.
+	for(uint8_t i = 1; i <= length; i++)
+		twi_tx_buffer[i] = data[i-1];		
+	
+	// Save the data length for use in the interupt routine.
+	twi_tx_length = length + 1;
+	
+	// Initiate transmission by issusing a start condition.
+	twi_start();
+	
+	// Should have a status return here...
 }
 
-void twi_read(uint8_t* data, uint8_t length)
+void twi_read(uint8_t sla, uint8_t* data, uint8_t* length)
 {
-	;
+	// Copy slave address into the tx buffer.
+	twi_tx_buffer[0] = (sla << 1) + 1;
+	
+	// Initiate transmission by issusing a start condition.
+	twi_start();
+	
+	// Should wait for reply here... Have a timeout...
+	
+	// Copy received bytes from buffer to *data
+	*length = twi_rx_pointer;
+	for(uint8_t i = 0; i < twi_rx_pointer; i++)
+		data[i] = twi_rx_buffer[i];
+		
+	// Should have a status return here...
 }
 
 ISR(TWI_vect)
@@ -95,16 +120,16 @@ ISR(TWI_vect)
 		// Repeated start condition transmitted.
 		case TWI_REP_START:
 			// Reset the buffer pointer.
-			twi_transceiver_pointer = 0;
+			twi_tx_pointer = 0;
 		
 		// Slave address and write transmitted. Ack received.
 		case TWI_MTX_ADR_ACK:
 		// Data byte transmitted. Ack received.
 		case TWI_MTX_DATA_ACK:
 			// Transmit byte in the buffer or issue twi stop if last data byte has been transmitted.
-			if(twi_transceiver_pointer < twi_transceiver_length)
+			if(twi_tx_pointer < twi_tx_length)
 			{
-				TWDR = twi_transceiver_buffer[twi_transceiver_pointer++];
+				TWDR = twi_tx_buffer[twi_tx_pointer++];
 				twi_enable_interupt(TWI_NACK);
 			}
 			else
@@ -114,24 +139,20 @@ ISR(TWI_vect)
 		// Data byte received. Ack transmitted
 		case TWI_MRX_DATA_ACK:
 			// Read the last data byte received.
-			twi_transceiver_buffer[twi_transceiver_pointer++] = TWDR; 
+			twi_tx_buffer[twi_tx_pointer++] = TWDR; 
 		
 		// Slave address and read received. Ack received.
 		case TWI_MRX_ADR_ACK:
 			// After last data byte received transmitic nack.
-			if(twi_transceiver_pointer < (twi_transceiver_length - 1))
-			{
+			if(twi_tx_pointer < (twi_tx_length - 1))
 				twi_enable_interupt(TWI_ACK);
-			}
 			else
-			{
 				twi_enable_interupt(TWI_NACK);
-			}
 			break;			
 		
 		// Data byte received. Nack transmitted
 		case TWI_MRX_DATA_NACK:
-			twi_transceiver_buffer[twi_transceiver_pointer] = TWDR;
+			twi_tx_buffer[twi_tx_pointer] = TWDR;
 			twi_stop();
 			break;
 		
@@ -149,26 +170,21 @@ ISR(TWI_vect)
 
 int main(void)
 {
-	DDRC |= (1 << PC0);
-	PORTC &= ~(1 << PC0);
-
 	twi_init();  // Initalize the TWI.
 	sei();       // Enable interrupts.
 
-	uint8_t length;
-	uint8_t msg[2];
+	uint8_t sla = 112; // slave address
+	uint8_t tx[128];
+	uint8_t rx[128];
+	uint8_t rx_len;
 
 	while(1)
 	{
-		length = 2;
-		msg[0] = 224;
-		msg[1] = 1;
-		twi_write(&msg[0], length);
+		tx[0] = 1;
+		twi_write(sla, &tx[0], 1);
 		_delay_ms(.2);
-
-		length = 1;
-		msg[0] = 225; 
-		twi_write(&msg[0], length);
+ 
+		twi_read(sla, &rx[0], &rx_len);
 		_delay_ms(.2);
 	}
 	
