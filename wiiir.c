@@ -1,5 +1,5 @@
 #include <avr/io.h>
-#include <util/twi.h>
+#include <avr/interrupt.h>
 
 // TWI genera status codes
 #define TWI_START              0x08 // Start has been transmitted.
@@ -8,15 +8,19 @@
 
 // TWI master transmitter status codes
 #define TWI_MTX_ADR_ACK        0x18 // SLA+W has been transmitted and ACK reveived.
-#define TWI_MTX_ARD_NACK       0x20 // SLA+W has been transmitted and NACK reveived.
+#define TWI_MTX_ADR_NACK       0x20 // SLA+W has been transmitted and NACK reveived.
 #define TWI_MTX_DATA_ACK       0x28 // Data byte has been transmitted and ACK reveived.
 #define TWI_MTX_DATA_NACK      0x30 // Data byte has been transmitted and NACK reveived.
 
 // TWI master reveiver status codeds
 #define TWI_MRX_ADR_ACK        0x40 // SLA+W has been transmitted and ACK reveived.
-#define TWI_MRX_ARD_NACK       0x48 // SLA+W has been transmitted and NACK reveived.
+#define TWI_MRX_ADR_NACK       0x48 // SLA+W has been transmitted and NACK reveived.
 #define TWI_MRX_DATA_ACK       0x50 // Data byte has been transmitted and ACK reveived.
 #define TWI_MRX_DATA_NACK      0x58 // Data byte has been transmitted and NACK reveived.
+
+static volatile uint8_t twi_transeiver_buffer[128];
+static volatile uint8_t twi_transeiver_pointer;
+static volatile uint8_t twi_transeiver_length;
 
 void twi_init(void)
 {
@@ -33,9 +37,31 @@ void twi_init(void)
 void twi_start(void)
 {
 	TWCR = (1 << TWEN) |                               // Enable TWI interface and release TWI pins.
-	       (0 << TWIE) | (1 << TWINT) |                // Enable TWI interupt.
+	       (1 << TWIE) | (1 << TWINT) |                // Enable TWI interupt and clear the interupt flag.
 	       (0 << TWEA) | (1 << TWSTA) | (0 << TWSTO) | // Enable start condition.
 	       (0 << TWWC);
+}
+
+void twi_stop(void)
+{
+	TWCR = (1 << TWEN) |                               // Enable TWI interface and release TWI pins.
+	       (0 << TWIE) | (1 << TWINT) |                // Disable TWI interupt and clear the interupt flag.
+	       (0 << TWEA) | (0 << TWSTA) | (1 << TWSTO) | // Enable stop condition.
+	       (0 << TWWC);
+}
+
+void twi_write(uint8_t* data, uint8_t length)
+{
+	for(uint8_t i = 0; i < length; i++)                // Copy data to be transmitted into the transeiver buffer.
+		twi_transeiver_buffer[i] = data[i];
+		
+	twi_transeiver_length = length;                    // Save the data length for use in the interupt routine.
+	twi_start();                                       // Initiate transmission by issusing a start condition.
+}
+
+void twi_read(uint8_t* data, uint8_t length)
+{
+	;
 }
 
 ISR(TWI_vect)
@@ -60,11 +86,12 @@ ISR(TWI_vect)
 int main(void)
 {
 
-	twi_init();
+	twi_init();  // Initalize the TWI.
+	sei();       // Enable interrupts.
 
 	while(1)
 	{
-		twi_start();
+		;
 	}
 	
 	return 0;
