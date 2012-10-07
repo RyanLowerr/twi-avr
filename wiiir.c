@@ -18,9 +18,9 @@
 #define TWI_MRX_DATA_ACK       0x50 // Data byte has been transmitted and ACK reveived.
 #define TWI_MRX_DATA_NACK      0x58 // Data byte has been transmitted and NACK reveived.
 
-static volatile uint8_t twi_transeiver_buffer[128];
-static volatile uint8_t twi_transeiver_pointer;
-static volatile uint8_t twi_transeiver_length;
+static volatile uint8_t twi_transceiver_buffer[128];
+static volatile uint8_t twi_transceiver_pointer;
+static volatile uint8_t twi_transceiver_length;
 
 void twi_init(void)
 {
@@ -52,10 +52,9 @@ void twi_stop(void)
 
 void twi_write(uint8_t* data, uint8_t length)
 {
-	for(uint8_t i = 0; i < length; i++)                // Copy data to be transmitted into the transeiver buffer.
-		twi_transeiver_buffer[i] = data[i];
-		
-	twi_transeiver_length = length;                    // Save the data length for use in the interupt routine.
+	for(uint8_t i = 0; i < length; i++)                // Copy data to be transmitted into the transceiver buffer.
+		twi_transceiver_buffer[i] = data[i];		
+	twi_transceiver_length = length;                    // Save the data length for use in the interupt routine.
 	twi_start();                                       // Initiate transmission by issusing a start condition.
 }
 
@@ -66,10 +65,12 @@ void twi_read(uint8_t* data, uint8_t length)
 
 ISR(TWI_vect)
 {
-	switch (TWSR & 0xf8)                               // Chect the TWI status registar while masking off the prescaler bits.
+	switch (TWSR & 0xF8)                               // Chect the TWI status registar while masking off the prescaler bits.
 	{
 		case TWI_START:
 		case TWI_REP_START:
+			twi_transceiver_pointer = 0;
+			break;
 		case TWI_MTX_ADR_ACK:
 		case TWI_MTX_DATA_ACK:
 		case TWI_MRX_ADR_ACK:
