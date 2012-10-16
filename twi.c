@@ -77,16 +77,18 @@ void twi_read(uint8_t sla, uint8_t* data, uint8_t length)
 	// Copy slave address into the tx buffer.
 	twi_buffer[0] = (sla << 1) + 1;
 	
-	twi_length = length + 1;
+	twi_length = length+1;
 	
 	// Initiate transmission by issusing a start condition.
 	twi_start();
 	
 	// Should wait for reply here... Have a timeout...
+	// For now just small delay to wait so the buffer can be filled before we copy it over to data[]
+	_delay_us(380);
 	
 	// Copy received bytes from buffer to *data
-	for(uint8_t i = 0; i < twi_pointer; i++)
-		data[i] = twi_buffer[i];
+	for(uint8_t i = 0; i < twi_length; i++)
+		data[i] = twi_buffer[i+1];
 		
 	// Should have a status return here...
 }

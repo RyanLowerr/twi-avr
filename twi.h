@@ -1,7 +1,6 @@
 // TWI genera status codes
 #define TWI_START              0x08 // Start has been transmitted.
 #define TWI_REP_START          0x10 // Repeated start has been transmitted.
-#define TWI_ARB_LOST           0x38 // Arbitration lost.
 
 // TWI master transmitter status codes
 #define TWI_MTX_ADR_ACK        0x18 // SLA+W has been transmitted and ACK reveived.
